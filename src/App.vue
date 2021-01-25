@@ -1,17 +1,18 @@
 <template>
   <div id="app">
-	  <Index></Index>
+	  <router-view></router-view>
+	  <!-- <Index></Index> -->
   </div>
 </template>
 
 <script>
-import Index from './view/index.vue'
+// import Index from './view/index.vue'
 
 export default {
   name: 'app',
-  components: {
-    Index
-  }
+  // components: {
+  //   Index
+  // }
 }
 </script>
 
