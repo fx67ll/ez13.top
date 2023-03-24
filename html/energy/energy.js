@@ -182,7 +182,7 @@
 					}
 				}]), e
 				// }())("Energy", {
-			}())("fx67ll", {
+			}())("ez13.top", {
 				color: "#0f070a",
 				size: b.a.isMobile ? .6 : .8
 			});

@@ -259,7 +259,7 @@
 			distinction: .01
 		}, 1);
 		// var C = new a.a("Boreal Sky", {
-		var C = new a.a("fx67ll", {
+		var C = new a.a("ez13.top - maanshan No.2 mid school", {
 			color: "#FFFFFF",
 			size: P.a.isMobile ? .08 : .1,
 			wireframe: !0,

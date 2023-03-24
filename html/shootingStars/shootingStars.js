@@ -163,7 +163,7 @@
 				return j(t, f["a"]), t
 			}()) || r) || r),
 			// S = new l.a("Shooting Stars", {
-			S = new l.a("fx67ll", {
+			S = new l.a("ez13.top - maanshan No.2 mid school", {
 				color: "#dc2c5a",
 				size: b.a.isMobile ? .4 : .8
 			});

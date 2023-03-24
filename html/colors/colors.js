@@ -163,7 +163,7 @@
 		}()) || r) || r);
 		g.camera.position.z = 6;
 		// var P = new u.a("Colors", {
-		var P = new u.a("fx67ll", {
+		var P = new u.a("ez13.top", {
 			color: "#ffffff",
 			size: (y.a.isMobile, .4),
 			wireframe: !1,

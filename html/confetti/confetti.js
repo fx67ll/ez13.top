@@ -162,7 +162,7 @@
 				return j(t, a["a"]), t
 			}()) || r) || r),
 			// P = new u.a("Confetti", {
-			P = new u.a("fx67ll", {
+			P = new u.a("ez13.top - maanshan No.2 mid school", {
 				color: "#0f070a",
 				size: b.a.isMobile ? .5 : .8
 			});
