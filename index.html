@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 	<head>
 		<meta http-equiv="Content-Type" content="text/html" charset="utf-8" />
@@ -11,32 +11,52 @@
 		<meta name="robots" content="fx67ll fx67ll.com" />
 		<!-- <link rel="icon" href="favicon.ico"> -->
 		<link rel="shortcut icon" type="image/x-icon" href="https://test.fx67ll.com/fx67ll-img-collection/fx67ll.jpg" />
-		<link href="./lib/css/vendors.css" rel="stylesheet" />
-		<link href="./html/borealSky/borealSky.css" rel="stylesheet" />
+
+		<link href="./lib/css/normalize.css" rel="stylesheet" />
+		<link href="./lib/css//flipclock.css" rel="stylesheet" />
+		
+		<style type="text/css">
+			body {
+				background-color: rgba(236, 240, 241, 1);
+				/* background-color: rgba(46, 204, 113, 1); */
+			}
+
+			.clock-container {
+				width: 100%;
+				height: 100%;
+			}
+
+			.clock {
+				width: 530px;
+				margin: 0 auto;
+				margin-top: 17%;
+				text-align: center;
+				zoom: 1.5;
+				position: relative;
+				left: 20px;
+			}
+		</style>
 	</head>
 	<body>
-		<div class="overlay"></div>
-		<main>
-			<div class="frame">
-				<div class="frame__title-wrap">
-					<h1 class="frame__title">Animated Mesh Lines</h1>
-				</div>
-				<a class="frame__github" href="https://github.com/fx67ll/" target="_blank">GitHub</a>
-				<div class="frame__links">
-					<a href="https://fx67ll.com" target="_blank">fx67ll.com</a>
-					<a href="https://fx67ll.xyz" target="_blank">fx67ll.xyz</a>
-					<a href="https://nav.fx67ll.com" target="_blank">站点导航</a>
-				</div>
-				<div class="frame__demos">
-					<a href="./html/borealSky/borealSky.html" class="frame__demo frame__demo--current">boreal Sky</a>
-					<a href="./html/colors/colors.html" class="frame__demo">colors</a>
-					<a href="./html/confetti/confetti.html" class="frame__demo">confetti</a>
-					<a href="./html/energy/energy.html" class="frame__demo">energy</a>
-					<a href="./html/shootingStars/shootingStars.html" class="frame__demo">shooting Stars</a>
-				</div>
-			</div>
-		</main>
-		<script type="text/javascript" src="./lib/js/vendors.js"></script>
-		<script type="text/javascript" src="./html/borealSky/borealSky.js"></script>
+		<div class="clock-container">
+			<div class="clock"></div>
+		</div>
+
+		<script src="./lib/js/jquery.min.js"></script>
+		<script src="./lib/js/flipclock.min.js"></script>
+		<script type="text/javascript">
+			var clock;
+			$(document).ready(function() {
+				var clock;
+				$(document).ready(function() {
+					clock = $('.clock').FlipClock({
+						clockFace: 'TwelveHourClock'
+					});
+				});
+			});
+			$(".clock").click(function() {
+				window.location.href = 'three.html';
+			});
+		</script>
 	</body>
 </html>
