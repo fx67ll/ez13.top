@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+	<meta charset="utf-8">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	<meta name="viewport" content="width=device-width,initial-scale=1.0">
+	<meta name="description" content="ez13.top 在线时钟">
+	<link rel="shortcut icon" type="image/x-icon" href="<%= BASE_URL %>favicon.ico" />
+	<title>ez13.top 在线时钟</title>
+	<style>
+		/* 首屏加载占位：浅色极简风格，Vue 挂载后自动替换 */
+		#app {
+			width: 100%;
+			height: 100vh;
+			margin: 0;
+			background: linear-gradient(160deg, #f7fafc 0%, #eef4f8 100%);
+		}
+
+		#splash {
+			position: fixed;
+			top: 50%;
+			left: 50%;
+			transform: translate(-50%, -50%);
+			font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+			font-size: 15px;
+			color: #9aa7b3;
+			letter-spacing: 2px;
+			user-select: none;
+		}
+
+		#splash::after {
+			display: block;
+			width: 28px;
+			height: 28px;
+			margin: 14px auto 0;
+			border: 3px solid #dde6ee;
+			border-top-color: #42b983;
+			border-radius: 50%;
+			content: '';
+			animation: splash-spin 0.9s linear infinite;
+		}
+
+		@keyframes splash-spin {
+			to {
+				transform: rotate(360deg);
+			}
+		}
+	</style>
+</head>
+
+<body>
+	<noscript>
+		<strong>We're sorry but ez13.top doesn't work properly without JavaScript enabled. Please enable it to
+			continue.</strong>
+	</noscript>
+	<div id="app">
+		<div id="splash">正在加载</div>
+	</div>
+	<!-- built files will be auto injected -->
+</body>
+
+</html>
