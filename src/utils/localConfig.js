@@ -9,6 +9,8 @@ const STORAGE_KEY = 'ez13-clock-settings';
 export const DEFAULT_SETTINGS = {
   // 当前显示的时钟类型：digital（数字时钟）/ binary（二进制时钟）/ flip（翻页时钟）
   clockType: 'digital',
+  // 时间来源（各时钟通用）：auto（本机时间优先，偏差超过 1 秒时按网络时间静默校正）/ local（完全使用本机时间）
+  timeSource: 'auto',
   // 数字时钟配置
   digital: {
     // 数字时钟主题
@@ -61,6 +63,7 @@ export const DEFAULT_SETTINGS = {
 // 枚举型配置的合法取值表，本地存储的历史遗留非法值（如已更名/已删除的主题）会被自动回退为默认值
 const ENUM_WHITELIST = {
   clockType: ['digital', 'binary', 'flip'],
+  timeSource: ['auto', 'local'],
   'digital.theme': ['fx67ll', 'aurora', 'ocean', 'forest', 'sunset', 'violet', 'graphite'],
   'digital.timeZone': ['Asia/Shanghai', 'Asia/Tokyo', 'Europe/London', 'America/New_York', 'UTC'],
   'flip.mode': ['clock', 'countdown'],
@@ -143,6 +146,12 @@ function mergeSettings(defaults, stored) {
 export function loadSettings() {
   try {
     var stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    // 历史版本迁移：时间来源原存于 digital.timeSource（仅数字时钟生效），升级为全局配置后迁移至顶层
+    if (stored && typeof stored === 'object' && typeof stored.timeSource === 'undefined') {
+      if (stored.digital && (stored.digital.timeSource === 'local' || stored.digital.timeSource === 'auto')) {
+        stored.timeSource = stored.digital.timeSource;
+      }
+    }
     return sanitizeSettings(mergeSettings(DEFAULT_SETTINGS, stored));
   } catch (e) {
     return deepClone(DEFAULT_SETTINGS);

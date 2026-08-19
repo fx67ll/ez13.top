@@ -41,6 +41,13 @@ export default {
 			required: false,
 			default: true
 		},
+		// 网络校时偏差（毫秒）：时钟模式以「本机时间 + 偏差」为基准起跳，
+		// flipclock 面板每秒按真实流逝时间推进，基准偏移会一直保持；倒计时按真实流逝时间倒数，偏差天然抵消，不参与
+		offsetMs: {
+			type: Number,
+			required: false,
+			default: 0
+		},
 		// 修改翻页时钟缩放尺寸，复杂修改请直接重写样式表
 		zoomSize: {
 			type: Number,
@@ -66,6 +73,10 @@ export default {
 			this.renderFlipClock();
 		},
 		showLabels() {
+			this.renderFlipClock();
+		},
+		// 校时偏差变化时以新基准重建，保证网络校正立即生效
+		offsetMs() {
 			this.renderFlipClock();
 		}
 	},
@@ -119,10 +130,10 @@ export default {
 				this.flipClockInstance = new FlipClock(this.$refs.flipClock, new Date(this.targetDate), options);
 				this.$emit('flip-countdown-start', this.targetDate);
 			} else {
-				// 时钟模式：以当前时间为基准翻页走时
+				// 时钟模式：以「当前时间 + 校时偏差」为基准翻页走时，之后按真实流逝时间推进
 				options.face = 'TwentyFourHourClock';
 				options.countdown = false;
-				this.flipClockInstance = new FlipClock(this.$refs.flipClock, new Date(), options);
+				this.flipClockInstance = new FlipClock(this.$refs.flipClock, new Date(Date.now() + this.offsetMs), options);
 			}
 		}
 	}

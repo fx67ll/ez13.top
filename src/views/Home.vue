@@ -5,14 +5,18 @@
 			<div class="ez-home-clock-area">
 				<transition name="ez-home-fade" mode="out-in">
 					<div v-if="settings.clockType === 'digital'" key="digital" class="ez-home-clock-item">
-						<fx67ll-digital-clock :theme="settings.digital.theme" :timeZone="settings.digital.timeZone"
-							:hour12="settings.digital.hour12" :showDigital="settings.digital.showDigital"
-							:smoothSeconds="settings.digital.smoothSeconds" :showDate="settings.digital.showDate"
-							:showAnalog="settings.digital.showAnalog"
-							:zoomSize="settings.digital.zoom"></fx67ll-digital-clock>
+						<!-- 网络校时说明：syncUrl 每次同步后更换随机参数，确保 HEAD 请求不被浏览器/CDN 缓存命中，
+							避免拿到过期的 Date 响应头导致初始化时间跳变；timeSource 为 local 时完全使用本机时间 -->
+						<fx67ll-digital-clock :key="digitalClockKey" :theme="settings.digital.theme"
+							:timeZone="settings.digital.timeZone" :hour12="settings.digital.hour12"
+							:showDigital="settings.digital.showDigital" :smoothSeconds="settings.digital.smoothSeconds"
+							:showDate="settings.digital.showDate" :showAnalog="settings.digital.showAnalog"
+							:zoomSize="settings.digital.zoom" :syncEnabled="isServerSyncEnabled"
+							:syncUrl="digitalSyncUrl" @time-sync="handleTimeSync"></fx67ll-digital-clock>
 					</div>
 					<div v-else-if="settings.clockType === 'binary'" key="binary" class="ez-home-clock-item">
-						<fx67ll-binary-clock :isShowTime="settings.binary.isShowTime"
+						<!-- ref 用于注入校时偏差：二进制时钟组件内部读取本机时间，此处覆写其取时方法以应用共享偏差 -->
+						<fx67ll-binary-clock ref="binaryClock" :isShowTime="settings.binary.isShowTime"
 							:showLabel="settings.binary.showLabel" :zoomSize="settings.binary.zoom"
 							:dotSize="settings.binary.dotSize" :textSize="settings.binary.textSize"
 							:textSpacing="settings.binary.textSpacing">
@@ -21,14 +25,15 @@
 					<div v-else key="flip" class="ez-home-clock-item">
 						<ez-flip-clock :mode="settings.flip.mode" :targetDate="settings.flip.targetDate"
 							:showSeconds="settings.flip.showSeconds" :showLabels="settings.flip.showLabels"
-							:zoomSize="settings.flip.zoom"></ez-flip-clock>
+							:offsetMs="sharedOffsetMs" :zoomSize="settings.flip.zoom"></ez-flip-clock>
 					</div>
 				</transition>
 			</div>
 		</main>
 
-		<!-- 快捷键提示：左下角小字，仅沉浸模式下显示 -->
-		<p class="ez-home-hint" v-if="!configOpen" aria-hidden="true">Ctrl+E+Z 设置</p>
+		<!-- 快捷键提示：左下角小字，仅沉浸模式下显示；同时是隐藏入口，悬浮点亮、点击直达设置面板 -->
+		<button type="button" class="ez-home-hint" v-if="!configOpen" title="点击打开设置面板" aria-label="打开设置面板（快捷键 Ctrl+E+Z）"
+			@click="openConfigPanel">Ctrl+E+Z 设置</button>
 
 		<!-- 合规页脚 -->
 		<fx67ll-footer fontColor="#9aa7b3"></fx67ll-footer>
@@ -200,6 +205,24 @@
 					</div>
 				</template>
 
+				<!-- 时间同步（各时钟通用）：本机时间 / 网络时间 二选一，实时展示最近一次校时结果 -->
+				<div class="ez-home-settings-row ez-home-settings-row--stacked">
+					<span class="ez-home-settings-label">时间同步</span>
+					<div class="ez-home-sync-group">
+						<button type="button" class="ez-home-sync-btn"
+							:class="{ active: settings.timeSource === 'local' }"
+							:aria-pressed="settings.timeSource === 'local' ? 'true' : 'false'"
+							@click="useLocalTime">同步本地时间</button>
+						<button type="button" class="ez-home-sync-btn"
+							:class="{ active: settings.timeSource === 'auto' }"
+							:aria-pressed="settings.timeSource === 'auto' ? 'true' : 'false'"
+							@click="syncServerTime">同步网络时间</button>
+					</div>
+					<p class="ez-home-sync-status" :class="{ 'ez-home-sync-status--pending': timeSyncPending }">
+						{{ timeSyncStatus }}
+					</p>
+				</div>
+
 				<!-- 缩放尺寸（各时钟通用） -->
 				<div class="ez-home-settings-row">
 					<label class="ez-home-settings-label" for="ez-clock-zoom">缩放尺寸</label>
@@ -231,6 +254,21 @@ export default {
 			configOpen: false,
 			// 当前按住的按键集合，用于检测 Ctrl+E+Z 组合键
 			heldKeys: [],
+			// 网络校时地址随机参数：每次同步完成后更换，保证下一次请求绕开缓存拿到实时的 Date 响应头
+			syncNonce: Date.now(),
+			// 共享校时引擎的地址随机参数：与数字时钟组件内部同步互不干扰，每次发起前更换
+			engineNonce: Date.now(),
+			// 网络校时偏差（毫秒）：翻页 / 二进制时钟的显示基准，auto 模式下由校时引擎维护，local 模式恒为 0
+			sharedOffsetMs: 0,
+			// 校时引擎周期定时器与页面可见性监听（各时钟通用，不依赖数字时钟是否挂载）
+			engineTimer: null,
+			// 手动切换时间来源时递增，配合 key 强制数字时钟重建，使新的同步配置立即生效
+			clockRemount: 0,
+			// 时间同步状态文案与进行中标记，展示在设置面板「时间同步」一行
+			timeSyncStatus: '网络时间自动校准中…',
+			timeSyncPending: true,
+			// 同步结果等待定时器：超时未收到 time-sync 事件则提示失败（组件库对失败静默处理，不抛出事件）
+			timeSyncTimer: null,
 			// 界面本地配置：默认配置 + localStorage 覆盖
 			settings: loadSettings(),
 			// 数字时钟主题选项
@@ -257,6 +295,19 @@ export default {
 		digitalThemeRows() {
 			return [this.digitalThemeList.slice(0, 4), this.digitalThemeList.slice(4)];
 		},
+		// 是否启用数字时钟的网络时间同步：timeSource 为 local 时完全使用本机时间
+		isServerSyncEnabled() {
+			return this.settings.timeSource !== 'local';
+		},
+		// 网络校时请求地址：以当前站点为源，附加随机查询参数保证每次请求都是全新地址，
+		// 避免生产环境（响应头无 Cache-Control，走启发式缓存）命中缓存后拿到过期的 Date 头
+		digitalSyncUrl() {
+			return window.location.origin + window.location.pathname + '?__clockSync=' + this.syncNonce;
+		},
+		// 数字时钟重建 key：仅在手动切换时间来源时变化，平时保持稳定避免周期性重挂载
+		digitalClockKey() {
+			return this.settings.timeSource + '-' + this.clockRemount;
+		},
 		// 当前时钟的缩放值：读写统一代理到对应时钟的 zoom 配置
 		currentZoom: {
 			get() {
@@ -274,17 +325,38 @@ export default {
 				saveSettings(val);
 			},
 			deep: true
+		},
+		// 切换到二进制时钟后重新注入校时偏差（新组件实例的方法是原始版本）
+		'settings.clockType'() {
+			var self = this;
+			this.$nextTick(function () {
+				self.applyBinaryClockTimeSource();
+			});
 		}
 	},
 	mounted() {
 		window.addEventListener('keydown', this.handleKeydown);
 		window.addEventListener('keyup', this.handleKeyup);
 		window.addEventListener('blur', this.clearHeldKeys);
+		// 按当前时间来源初始化：auto 启动共享校时引擎（前台同步一次 + 周期 + 可见性恢复），local 仅刷新文案
+		if (this.isServerSyncEnabled) {
+			this.startEngine(true);
+		} else {
+			this.timeSyncPending = false;
+			this.timeSyncStatus = '已使用本机时间，时钟与本机电脑保持一致';
+		}
+		// 首屏即为二进制时钟时同样需要注入校时偏差
+		var self = this;
+		this.$nextTick(function () {
+			self.applyBinaryClockTimeSource();
+		});
 	},
 	beforeDestroy() {
 		window.removeEventListener('keydown', this.handleKeydown);
 		window.removeEventListener('keyup', this.handleKeyup);
 		window.removeEventListener('blur', this.clearHeldKeys);
+		this.clearTimeSyncTimer();
+		this.stopEngine();
 	},
 	methods: {
 		// 组合键检测：Ctrl（或 Mac 的 Cmd）+ E + Z 三键同时按住时切换配置模式
@@ -327,9 +399,202 @@ export default {
 		clearHeldKeys() {
 			this.heldKeys = [];
 		},
+		// 左下角快捷键提示的隐藏入口：点击直达设置面板
+		openConfigPanel() {
+			this.configOpen = true;
+		},
+		// 切换为本机时间：停止校时引擎并重建数字时钟，三种时钟立即回到本机电脑时间
+		useLocalTime() {
+			if (this.settings.timeSource !== 'local') {
+				this.settings.timeSource = 'local';
+				this.clockRemount += 1;
+			}
+			this.stopEngine();
+			this.clearTimeSyncTimer();
+			this.timeSyncPending = false;
+			this.timeSyncStatus = '已使用本机时间，时钟与本机电脑保持一致';
+		},
+		// 立即同步网络时间：共享引擎以前台方式发起一次全新校时，来源变化时同时重建数字时钟
+		syncServerTime() {
+			if (this.settings.timeSource !== 'auto') {
+				this.settings.timeSource = 'auto';
+				this.syncNonce = Date.now();
+				this.clockRemount += 1;
+			}
+			this.startEngine(true);
+		},
+		// 数字时钟组件内部同步完成回调：仅更换其下次请求地址（状态展示以共享校时引擎为准）
+		handleTimeSync() {
+			this.syncNonce = Date.now();
+		},
+		// 启动共享校时引擎：周期同步 + 页面恢复可见时补一次；foreground 为 true 时立即以前台方式同步一次
+		startEngine(foreground) {
+			var self = this;
+			if (!this.engineTimer) {
+				this.engineTimer = setInterval(function () {
+					self.runServerSync(false);
+				}, 300000);
+				document.addEventListener('visibilitychange', this.handleVisibilitySync);
+			}
+			if (foreground) {
+				this.runServerSync(true);
+			}
+		},
+		// 停止共享校时引擎：清理定时器与监听，偏差归零（翻页 / 二进制时钟随之回到本机时间）
+		stopEngine() {
+			if (this.engineTimer) {
+				clearInterval(this.engineTimer);
+				this.engineTimer = null;
+			}
+			document.removeEventListener('visibilitychange', this.handleVisibilitySync);
+			this.sharedOffsetMs = 0;
+		},
+		// 页面重新可见时静默补一次校时，修复标签页休眠期间累积的偏差
+		handleVisibilitySync() {
+			if (document.visibilityState === 'visible' && this.settings.timeSource !== 'local') {
+				this.runServerSync(false);
+			}
+		},
+		// 共享校时引擎：通过 HTTP Date 响应头估算服务器时间（含半程往返耗时补偿），
+		// 每次请求前更换随机查询参数保证全新地址不被缓存命中；偏差 1 秒以内视为噪音不校正；
+		// 偏差写入 sharedOffsetMs 供翻页 / 二进制时钟作为显示基准，前台同步同时驱动状态文案
+		runServerSync(foreground) {
+			var self = this;
+			if (this.settings.timeSource === 'local' || typeof window === 'undefined' || typeof XMLHttpRequest === 'undefined') {
+				return;
+			}
+			this.engineNonce = Date.now();
+			var url = window.location.origin + window.location.pathname + '?__clockEngine=' + this.engineNonce;
+			if (foreground) {
+				this.timeSyncPending = true;
+				this.timeSyncStatus = '正在同步网络时间…';
+				this.armTimeSyncTimer();
+			}
+			try {
+				var xhr = new XMLHttpRequest();
+				var start = Date.now();
+				xhr.open('HEAD', url, true);
+				xhr.timeout = 5000;
+				xhr.onload = function () {
+					var offset = null;
+					try {
+						var serverDate = xhr.getResponseHeader('Date');
+						if (serverDate && !isNaN(Date.parse(serverDate))) {
+							// 服务器时间 + 半程往返耗时 ≈ 当前服务器时间
+							var measured = Date.parse(serverDate) + (Date.now() - start) / 2 - Date.now();
+							// 本机时间优先：1 秒以内的偏差视为噪音，不校正
+							offset = Math.abs(measured) >= 1000 ? measured : 0;
+						}
+					} catch (e) {
+						// 解析失败按同步失败处理，保持当前时间
+					}
+					self.finishServerSync(foreground, offset);
+				};
+				xhr.onerror = function () {
+					self.finishServerSync(foreground, null);
+				};
+				xhr.ontimeout = function () {
+					self.finishServerSync(foreground, null);
+				};
+				xhr.send();
+			} catch (e) {
+				self.finishServerSync(foreground, null);
+			}
+		},
+		// 校时结果落地：写入共享偏差并刷新状态文案；offset 为 null 表示失败，前台同步时提示失败
+		finishServerSync(foreground, offset) {
+			// 竞态保护：等待期间已切回本机时间时，迟到的同步结果直接丢弃
+			if (this.settings.timeSource === 'local') {
+				return;
+			}
+			if (offset === null || typeof offset !== 'number' || isNaN(offset)) {
+				if (foreground) {
+					this.clearTimeSyncTimer();
+					this.timeSyncPending = false;
+					this.timeSyncStatus = '网络时间同步失败，时钟保持当前时间，可稍后重试';
+				}
+				return;
+			}
+			this.sharedOffsetMs = offset;
+			if (foreground) {
+				this.clearTimeSyncTimer();
+				this.timeSyncPending = false;
+			}
+			if (offset !== 0) {
+				this.timeSyncStatus = '已按网络时间校正 ' + this.formatSyncOffset(offset);
+			} else {
+				this.timeSyncStatus = '网络时间与本地时间一致，无需校正';
+			}
+		},
+		// 为二进制时钟注入校时偏差：组件内部固定读取本机时间且无时间入参，
+		// 此处覆写实例取时方法改为「本机时间 + 共享偏差」，每秒读取实时偏差，无需重复注入
+		applyBinaryClockTimeSource() {
+			var child = this.$refs.binaryClock;
+			if (!child || typeof child.getNowTime !== 'function') {
+				return;
+			}
+			var self = this;
+			child.getNowTime = function () {
+				var d = new Date(Date.now() + self.sharedOffsetMs);
+				var pad = function (num) {
+					return num < 10 ? '0' + num : '' + num;
+				};
+				var toBinaryArray = function (num) {
+					var bin = '';
+					var arr = [];
+					while (num > 0) {
+						bin = (num % 2) + bin;
+						num = Math.floor(num / 2);
+					}
+					arr = bin.split('');
+					while (arr.length < 6) {
+						arr.unshift('0');
+					}
+					return arr;
+				};
+				child.timeNow = pad(d.getHours()) + ' : ' + pad(d.getMinutes()) + ' : ' + pad(d.getSeconds());
+				child.hoursTimeArr = toBinaryArray(d.getHours());
+				child.minutesTimeArr = toBinaryArray(d.getMinutes());
+				child.secondsTimeArr = toBinaryArray(d.getSeconds());
+			};
+		},
+		// 布防同步超时提示：前台同步超时未收到结果时按失败提示（请求超时上限 5 秒）
+		armTimeSyncTimer() {
+			var self = this;
+			this.clearTimeSyncTimer();
+			this.timeSyncTimer = setTimeout(function () {
+				if (self.timeSyncPending) {
+					self.timeSyncPending = false;
+					self.timeSyncStatus = '网络时间同步失败，时钟保持当前时间，可稍后重试';
+				}
+			}, 6000);
+		},
+		clearTimeSyncTimer() {
+			if (this.timeSyncTimer) {
+				clearTimeout(this.timeSyncTimer);
+				this.timeSyncTimer = null;
+			}
+		},
+		// 将同步偏差毫秒数格式化为易读的时长与方向文案
+		formatSyncOffset(offsetMs) {
+			var seconds = Math.max(1, Math.round(Math.abs(offsetMs) / 1000));
+			var duration;
+			if (seconds < 60) {
+				duration = seconds + ' 秒';
+			} else if (seconds < 3600) {
+				duration = Math.floor(seconds / 60) + ' 分 ' + (seconds % 60) + ' 秒';
+			} else {
+				duration = Math.floor(seconds / 3600) + ' 小时 ' + (Math.floor(seconds / 60) % 60) + ' 分';
+			}
+			return duration + '（' + (offsetMs > 0 ? '本机时间较服务器偏慢' : '本机时间较服务器偏快') + '）';
+		},
 		// 恢复默认配置：清除 localStorage 后重置为内置默认值
 		resetLocalSettings() {
 			this.settings = resetSettings();
+			// 默认时间来源为 auto：恢复默认后重新自动校时，同步状态文案同步复位
+			if (this.isServerSyncEnabled) {
+				this.startEngine(true);
+			}
 		}
 	}
 };
@@ -388,17 +653,88 @@ export default {
 	}
 }
 
-// 快捷键提示：左下角广告式小字，低调不抢视线
+// 快捷键提示：左下角广告式小字，低调不抢视线；同时是隐藏入口，悬浮时点亮提示可点击
 .ez-home-hint {
 	position: absolute;
 	bottom: 10px;
 	left: 12px;
-	z-index: 1;
+	z-index: 100000;
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
 	margin: 0;
+	padding: 4px 6px;
+	border: none;
+	background: transparent;
 	font-size: 10px;
+	font-family: inherit;
 	letter-spacing: 0.5px;
 	color: #b8c4cf;
 	user-select: none;
+	cursor: pointer;
+	border-radius: 999px;
+	transition: color 0.25s ease, letter-spacing 0.25s ease, transform 0.25s ease,
+		text-shadow 0.25s ease, background 0.25s ease;
+
+	// 前置状态圆点：默认静态，悬浮时呼吸闪烁
+	&::before {
+		content: '';
+		flex-shrink: 0;
+		width: 5px;
+		height: 5px;
+		border-radius: 50%;
+		background: currentColor;
+		opacity: 0.5;
+		transition: background 0.25s ease;
+	}
+
+	// 底部渐变下划线：悬浮时从中间向两侧扫开
+	&::after {
+		content: '';
+		position: absolute;
+		right: 6px;
+		bottom: 1px;
+		left: 6px;
+		height: 1px;
+		background: linear-gradient(90deg, transparent, #42b983, transparent);
+		transform: scaleX(0);
+		transition: transform 0.3s ease;
+	}
+
+	&:hover,
+	&:focus-visible {
+		color: #42b983;
+		letter-spacing: 1.5px;
+		transform: translateY(-1px);
+		text-shadow: 0 0 8px rgba(66, 185, 131, 0.45);
+		// 悬浮时浮出一层浅色胶囊底衬，明确可点击的隐藏入口
+		background: rgba(66, 185, 131, 0.08);
+		outline: none;
+
+		&::before {
+			background: #42b983;
+			animation: ez-home-hint-pulse 1.2s ease-in-out infinite;
+		}
+
+		&::after {
+			transform: scaleX(1);
+		}
+	}
+}
+
+// 提示圆点呼吸动画
+@keyframes ez-home-hint-pulse {
+
+	0%,
+	100% {
+		opacity: 0.35;
+		transform: scale(0.8);
+	}
+
+	50% {
+		opacity: 1;
+		transform: scale(1.15);
+	}
 }
 
 // 页脚组件在浅色首页中的定位与字号微调
@@ -642,6 +978,49 @@ export default {
 	&:focus {
 		border-color: #42b983;
 		box-shadow: 0 0 0 2px rgba(66, 185, 131, 0.12);
+	}
+}
+
+// 时间同步按钮组：本机时间 / 网络时间 二选一，点击立即执行对应的同步动作
+.ez-home-sync-group {
+	display: flex;
+	gap: 8px;
+	width: 100%;
+
+	.ez-home-sync-btn {
+		flex: 1;
+		padding: 6px 0;
+		border: 1px solid #e3eaf1;
+		border-radius: 8px;
+		background: #ffffff;
+		font-size: 12px;
+		color: #5c6c7c;
+		cursor: pointer;
+		transition: all 0.2s;
+
+		&:hover {
+			border-color: #42b983;
+			color: #42b983;
+		}
+
+		&.active {
+			border-color: #42b983;
+			background: rgba(66, 185, 131, 0.08);
+			color: #27875d;
+		}
+	}
+}
+
+// 时间同步状态文案：展示最近一次同步结果，进行中时轻微高亮
+.ez-home-sync-status {
+	margin: 2px 0 0;
+	font-size: 11px;
+	line-height: 1.5;
+	color: #9aa7b3;
+	transition: color 0.2s;
+
+	&.ez-home-sync-status--pending {
+		color: #42b983;
 	}
 }
 
